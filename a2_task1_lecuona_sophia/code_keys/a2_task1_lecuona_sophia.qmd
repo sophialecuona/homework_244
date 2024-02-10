@@ -1,0 +1,208 @@
+---
+title: "ESM 244 Assignment 2 Task 1"
+author: "Sophia Lecuona"
+format:
+  html:
+    code-fold: show
+    toc: true
+    embed-resources: true
+editor: visual
+theme: lux
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+<ul class="nav nav-tabs" role="tablist">
+
+<li class="nav-item" role="presentation">
+
+<a class="nav-link active" data-bs-toggle="tab" href="#home" aria-selected="true" role="tab">Home</a>
+
+</li>
+
+<li class="nav-item" role="presentation">
+
+<a class="nav-link" data-bs-toggle="tab" href="#profile" aria-selected="false" role="tab" tabindex="-1">Profile</a>
+
+</li>
+
+<li class="nav-item" role="presentation">
+
+<a class="nav-link disabled" href="#" aria-selected="false" tabindex="-1" role="tab">Disabled</a>
+
+</li>
+
+<li class="nav-item dropdown">
+
+<a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false">Dropdown</a>
+
+<div class="dropdown-menu" style="">
+
+```         
+  <h6 class="dropdown-header">Dropdown header</h6>
+  <a class="dropdown-item" href="#">Action</a>
+  <a class="dropdown-item" href="#">Another action</a>
+  <a class="dropdown-item" href="#">Something else here</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item" href="#">Separated link</a>
+</div>
+```
+
+</li>
+
+</ul>
+
+::: {#myTabContent .tab-content}
+::: {#home .tab-pane .fade .active .show role="tabpanel"}
+```         
+<p>Raw denim you probably haven't heard of them jean shorts Austin. Nesciunt tofu stumptown aliqua, retro synth master cleanse. Mustache cliche tempor, williamsburg carles vegan helvetica. Reprehenderit butcher retro keffiyeh dreamcatcher synth. Cosby sweater eu banh mi, qui irure terry richardson ex squid. Aliquip placeat salvia cillum iphone. Seitan aliquip quis cardigan american apparel, butcher voluptate nisi qui.</p>
+```
+:::
+
+::: {#profile .tab-pane .fade role="tabpanel"}
+```         
+<p>Food truck fixie locavore, accusamus mcsweeney's marfa nulla single-origin coffee squid. Exercitation +1 labore velit, blog sartorial PBR leggings next level wes anderson artisan four loko farm-to-table craft beer twee. Qui photo booth letterpress, commodo enim craft beer mlkshk aliquip jean shorts ullamco ad vinyl cillum PBR. Homo nostrud organic, assumenda labore aesthetic magna delectus mollit.</p>
+```
+:::
+
+::: {#dropdown1 .tab-pane .fade}
+```         
+<p>Etsy mixtape wayfarers, ethical wes anderson tofu before they sold out mcsweeney's organic lomo retro fanny pack lo-fi farm-to-table readymade. Messenger bag gentrify pitchfork tattooed craft beer, iphone skateboard locavore carles etsy salvia banksy hoodie helvetica. DIY synth PBR banksy irony. Leggings gentrify squid 8-bit cred pitchfork.</p>
+```
+:::
+
+::: {#dropdown2 .tab-pane .fade}
+```         
+<p>Trust fund seitan letterpress, keytar raw denim keffiyeh etsy art party before they sold out master cleanse gluten-free squid scenester freegan cosby sweater. Fanny pack portland seitan DIY, art party locavore wolf cliche high life echo park Austin. Cred vinyl keffiyeh DIY salvia PBR, banh mi before they sold out farm-to-table VHS viral locavore cosby sweater.</p>
+```
+:::
+:::
+
+# CA DFW Oil Spill Incidents in California (2008)
+
+```{r}
+library(tidyverse)
+library(here)
+library(broom)
+
+# Spatial data packages
+library(sf)
+library(tmap)
+```
+
+### Data cleaning and wrangling
+
+#### Pseudocode
+
+- First, read in both datasets and ensure they are read in using the correct file type
+- Then fix the projections to be the same
+- join the datasets into one
+- plot and examine attributes!
+
+```{r}
+#read in the CA Counties shapefile
+ca_counties_raw_sf <- read_sf(here("a2_task1_lecuona_sophia", "data", "ca_counties_copy", "CA_Counties_TIGER2016.shp"))
+
+# clean names and go from m^2 to km^2 for land area
+ca_counties_sf <- ca_counties_raw_sf %>% 
+  janitor::clean_names() %>%
+  mutate(land_km2 = aland / 1e6) %>%
+  select(county = name, land_km2)
+
+# ca_counties_sf %>% st_crs()
+# ca_counties_sf %>% terra::crs() 
+# ^ done to see it is currently WGS 84 / Pseudo-Mercator
+```
+```{r}
+#read in the Oil Spill Incident Tracking shapefile
+oil_raw_sf <- read_sf(here("a2_task1_lecuona_sophia", "data", "ca_oil", "Oil_Spill_Incident_Tracking_[ds394].geojson"))
+
+# oil_sf <- oil_raw_sf %>%
+#   select(-LATITUDE, -LONGITUDE)
+
+write_sf(oil_raw_sf, here("a2_task1_lecuona_sophia", "data", "ca_oil", "oil_tracking.gpkg"))
+
+oil_sf <- read_sf(here("a2_task1_lecuona_sophia", "data", "ca_oil", "oil_tracking.gpkg")) %>%
+  janitor::clean_names() %>%
+  select(-latitude, -longitude)
+
+# Check the CRS:
+# oil_sf %>% st_crs()
+# oil_sf%>% terra::crs() 
+# ^ currently WGS 84 
+```
+```{r}
+#exploratory plot
+plot(oil_sf %>% select(objectid))
+```
+```{r}
+# transform the projection to match:
+oil_projected_sf <- st_transform(oil_sf, st_crs(ca_counties_sf))
+# oil_projected_sf %>% st_crs() 
+# check it! Yay it worked.  Both are WGS 84 / Pseudo-Mercator
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = ca_counties_sf) +
+  geom_sf(data = oil_projected_sf, size = 1, color = "red")
+```
+```{r}
+# spatial join!
+ca_and_oil_sf <- ca_counties_sf %>% 
+  st_join(oil_projected_sf)
+
+# by counts of incidents
+ca_oil_counts_sf <- ca_and_oil_sf %>% 
+  group_by(county) %>%
+  summarize(n_records = sum(!is.na(objectid)))
+
+# # change 'NA' row to be more intuitive:
+# ca_oil_counts_sf[58, 1] <- "Pacific Ocean"
+
+head(ca_oil_counts_sf)
+```
+
+## Exploratory interactive map
+
+```{r}
+#| eval: false ### the interactive map makes the HTML huge
+#| echo: true
+
+# Set the viewing mode to "interactive":
+tmap_mode(mode = "view")
+
+tm_shape(ca_counties_sf) +
+  tm_fill("land_km2", palette = c("#B0E0E6", "#DAA520","#A0522D")) +
+  tm_shape(oil_projected_sf) +
+  tm_dots(col= "darkblue") +
+  tm_layout(title = "Oil Spill Incident Tracking",
+            title.size = 1.5,
+            frame = FALSE)
+
+# legend.title = "CA County Sizes (km^2)",
+```
+See:
+
+-   [`tmap` vignettes](https://cran.r-project.org/web/packages/tmap/vignettes/tmap-getstarted.html)
+-   [Chapter 8 in Robin Lovelace's "Geocomputation in R"](https://geocompr.robinlovelace.net/adv-map.html#interactive-maps)
+
+## Finalized static choropleth map
+
+```{r}
+#plot choropleth
+ggplot(data = ca_oil_counts_sf) +
+  geom_sf(aes(fill = n_records), color = "white", size = 0.1) +
+  scale_fill_gradientn(colors = c("#B0E0E6", "#DAA520","#A0522D")) +
+  theme_minimal() +
+  labs(fill = "Number of Oil Incidence Reports")
+```
+
+## Point pattern analysis of oil spill occurances
+
+```{r}
+
+```
+
